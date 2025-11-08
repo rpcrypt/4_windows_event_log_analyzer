@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows Event Log Analyzer</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#8B4513',
+                        'high-risk': '#dc2626',
+                        'low-risk': '#f59e0b',
+                        'no-risk': '#10b981',
+                        'info': '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* This rule enables the smooth transition */
+        .risk-bar {
+            transition: height 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94); /* Smoother, more dynamic curve */
+        }
+        /* Custom scrollbar for log area */
+        .log-area::-webkit-scrollbar {
+            width: 8px;
+        }
+        .log-area::-webkit-scrollbar-thumb {
+            background-color: #d1d5db;
+            border-radius: 4px;
+        }
+        .log-area::-webkit-scrollbar-track {
+            background: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 md:p-8 font-sans">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Windows Event Log Analyzer</h1>
+            <p class="text-lg text-gray-600">Interface for Python Backend (Flask + win32evtlog)</p>
+        </header>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Control Panel (Left Column on Desktop) -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Log Type Selection -->
+                <div id="log-type-frame" class="p-4 bg-white shadow-lg rounded-xl border border-gray-200">
+                    <h2 class="text-xl font-semibold mb-3 text-gray-800">1. Select Log Category</h2>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="updateLogType('System')" class="log-type-btn bg-primary text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-150">System</button>
+                        <button onclick="updateLogType('Security')" class="log-type-btn bg-primary text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-150">Security</button>
+                        <button onclick="updateLogType('Application')" class="log-type-btn bg-primary text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition duration-150">Application</button>
+                    </div>
+                    <div class="mt-3 text-sm text-gray-500">
+                        Current Log: <span id="current-log-display" class="font-bold text-primary">System</span>
+                    </div>
+
+                    <div class="mt-4 pt-4 border-t border-gray-100">
+                        <label for="log-file-input" class="block text-sm font-medium text-gray-700 mb-2">Upload Log File (e.g., .evtx, .log)</label>
+                        <input type="file" id="log-file-input" class="block w-full text-sm text-gray-500
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-full file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-gray-100 file:text-primary
+                                hover:file:bg-gray-200">
+                        <button onclick="uploadLogFile()" id="upload-button" class="w-full mt-2 bg-secondary text-white font-bold py-2 rounded-lg shadow-md hover:bg-amber-800 transition duration-150">
+                            Process Uploaded File
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- Filters and Search -->
+                <div class="p-4 bg-white shadow-lg rounded-xl border border-gray-200 space-y-4">
+                    <h2 class="text-xl font-semibold text-gray-800">2. Apply Filters (Live Logs Only)</h2>
+                    
+                    <div>
+                        <label for="remote-computer" class="block text-sm font-medium text-gray-700">Remote Computer (Optional)</label>
+                        <input type="text" id="remote-computer" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary" placeholder="Enter remote PC name or IP">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="start-date" class="block text-sm font-medium text-gray-700">Start Date (YYYY-MM-DD)</label>
+                            <input type="date" id="start-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                        </div>
+                        <div>
+                            <label for="end-date" class="block text-sm font-medium text-gray-700">End Date (YYYY-MM-DD)</label>
+                            <input type="date" id="end-date" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="event-id" class="block text-sm font-medium text-gray-700">Event ID (Optional)</label>
+                        <input type="number" id="event-id" class="mt-1 block w-full p-2 border border-yellow-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500" placeholder="e.g., 7036">
+                    </div>
+
+                    <div class="pt-2">
+                        <button id="fetch-button" onclick="fetchLogs()" class="w-full bg-primary text-white font-bold py-3 rounded-lg shadow-md hover:bg-indigo-700 transition duration-150 flex items-center justify-center">
+                            <span id="fetch-text">Fetch Live Logs & Analyze</span>
+                            <svg id="fetch-spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Priority Actions -->
+                <div class="p-4 bg-secondary text-white shadow-lg rounded-xl border border-gray-200">
+                    <h2 class="text-xl font-semibold mb-3">Immediate Actions</h2>
+                    <button onclick="fetchPriorityLogs()" class="w-full bg-red-700 font-bold py-3 px-4 rounded-lg shadow-md hover:bg-red-800 transition duration-150">
+                        Show Immediate Priority Logs
+                    </button>
+                    <p class="text-sm mt-2 opacity-80">Fetches High-Risk events from Security and System logs.</p>
+                </div>
+
+            </div>
+
+            <!-- Display Area (Right Columns on Desktop) -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Risk Chart & Summary -->
+                <div class="p-6 bg-white shadow-lg rounded-xl border border-gray-200">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">3. Risk Analysis Summary</h2>
+                    <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                        
+                        <!-- Visualization Area -->
+                        <div id="risk-chart" class="flex-1 w-full flex items-end h-64 border-b border-l border-gray-300 pb-1">
+                            <div class="w-1/3 text-center">
+                                <div id="bar-high" class="risk-bar w-10 mx-auto bg-high-risk rounded-t-lg shadow-md mb-1" style="height: 0px;"></div>
+                                <span class="text-xs text-gray-500">High Risk (<span id="count-high">0</span>)</span>
+                            </div>
+                            <div class="w-1/3 text-center">
+                                <div id="bar-low" class="risk-bar w-10 mx-auto bg-low-risk rounded-t-lg shadow-md mb-1" style="height: 0px;"></div>
+                                <span class="text-xs text-gray-500">Low Risk (<span id="count-low">0</span>)</span>
+                            </div>
+                            <div class="w-1/3 text-center">
+                                <div id="bar-no" class="risk-bar w-10 mx-auto bg-no-risk rounded-t-lg shadow-md mb-1" style="height: 0px;"></div>
+                                <span class="text-xs text-gray-500">No Risk (<span id="count-no">0</span>)</span>
+                            </div>
+                        </div>
+
+                        <!-- Summary Panel -->
+                        <div class="flex-1 w-full md:w-auto p-4 bg-gray-50 rounded-lg space-y-2">
+                            <h3 class="font-bold text-gray-700">Analysis Details:</h3>
+                            <p class="text-sm">Log Priority: <span id="priority-value" class="font-bold text-info">N/A</span></p>
+                            <p class="text-sm">Total Events: <span id="total-events" class="font-bold text-gray-900">0</span></p>
+                            
+                            <h3 class="font-bold text-gray-700 mt-4">Risk Filters:</h3>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="setRiskFilter(null)" id="filter-all" class="bg-gray-200 text-gray-700 px-3 py-1 text-sm rounded-full font-medium transition duration-150">All</button>
+                                <button onclick="setRiskFilter('high')" id="filter-high" class="bg-red-100 text-high-risk px-3 py-1 text-sm rounded-full font-medium transition duration-150">High Risk</button>
+                                <button onclick="setRiskFilter('low')" id="filter-low" class="bg-yellow-100 text-low-risk px-3 py-1 text-sm rounded-full font-medium transition duration-150">Low Risk</button>
+                                <button onclick="setRiskFilter('no')" id="filter-no" class="bg-green-100 text-no-risk px-3 py-1 text-sm rounded-full font-medium transition duration-150">No Risk</button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Log Display Area -->
+                <div class="p-6 bg-white shadow-lg rounded-xl border border-gray-200">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">4. Log Output</h2>
+                    <div id="log-output" class="log-area h-96 overflow-y-auto p-3 bg-gray-800 text-gray-200 text-sm font-mono rounded-lg whitespace-pre-wrap">
+                        Connect to the backend (http://127.0.0.1:5000) and fetch logs to see the output here.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:5000/api/fetch_logs';
+        const PRIORITY_URL = 'http://127.0.0.1:5000/api/priority_logs';
+        const UPLOAD_URL = 'http://127.0.0.1:5000/api/upload_log';
+        
+        let currentLogType = 'System';
+        let currentRiskFilter = null; // null, 'high', 'low', 'no'
+
+        // DOM elements
+        const logOutput = document.getElementById('log-output');
+        const currentLogDisplay = document.getElementById('current-log-display');
+        const fetchButton = document.getElementById('fetch-button');
+        const fetchText = document.getElementById('fetch-text');
+        const fetchSpinner = document.getElementById('fetch-spinner');
+        const logFileInput = document.getElementById('log-file-input');
+        const uploadButton = document.getElementById('upload-button');
+
+        // Chart elements
+        const barHigh = document.getElementById('bar-high');
+        const barLow = document.getElementById('bar-low');
+        const barNo = document.getElementById('bar-no');
+        const countHigh = document.getElementById('count-high');
+        const countLow = document.getElementById('count-low');
+        const countNo = document.getElementById('count-no');
+        const priorityValue = document.getElementById('priority-value');
+        const totalEvents = document.getElementById('total-events');
+        
+        // Input fields
+        const remoteComputerInput = document.getElementById('remote-computer');
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+        const eventIdInput = document.getElementById('event-id');
+
+        /**
+         * Toggles the loading state of the fetch button.
+         * @param {boolean} isLoading 
+         * @param {string} type 
+         */
+        function setLoading(isLoading, type = 'fetch') {
+            const btn = (type === 'upload') ? uploadButton : fetchButton;
+            const textEl = (type === 'upload') ? uploadButton.querySelector('span') : fetchText;
+
+            if (type === 'upload') {
+                // For upload, we manually manage text if we want a spinner
+                btn.disabled = isLoading;
+                // For this simple mock, we'll just disable the button
+            } else {
+                fetchButton.disabled = isLoading;
+                if (isLoading) {
+                    fetchText.textContent = 'Fetching...';
+                    fetchSpinner.classList.remove('hidden');
+                } else {
+                    fetchText.textContent = 'Fetch Live Logs & Analyze';
+                    fetchSpinner.classList.add('hidden');
+                }
+            }
+        }
+
+        /**
+         * Updates the current log type and resets the view.
+         * @param {string} type 
+         */
+        function updateLogType(type) {
+            currentLogType = type;
+            currentLogDisplay.textContent = type;
+            document.querySelectorAll('.log-type-btn').forEach(btn => {
+                btn.classList.remove('bg-indigo-700');
+                btn.classList.add('bg-primary');
+            });
+            event.target.classList.add('bg-indigo-700');
+            event.target.classList.remove('bg-primary');
+            fetchLogs(); // Automatically re-fetch logs for the new type
+        }
+
+        /**
+         * Sets the risk filter and re-fetches logs with the current parameters.
+         * @param {string|null} filter 
+         */
+        function setRiskFilter(filter) {
+            currentRiskFilter = filter;
+            document.querySelectorAll('[id^="filter-"]').forEach(btn => {
+                btn.classList.remove('ring-2', 'ring-offset-2', 'ring-primary');
+            });
+            const filterId = filter ? `filter-${filter}` : 'filter-all';
+            document.getElementById(filterId).classList.add('ring-2', 'ring-offset-2', 'ring-primary');
+            fetchLogs(); 
+        }
+
+        /**
+         * Clears the log area and initializes the output.
+         * @param {string} logSource 
+         */
+        function clearLogOutput(logSource = 'live logs') {
+            logOutput.innerHTML = `<div>Fetching ${logSource} for <span class="text-info">${currentLogType}</span>...</div>`;
+        }
+
+        /**
+         * Renders the risk summary and chart, applying a smooth grow animation.
+         * @param {object} summary 
+         */
+        function renderSummary(summary) {
+            const { high_risk, low_risk, no_risk, priority } = summary;
+            const total = high_risk + low_risk + no_risk;
+            const maxVal = Math.max(high_risk, low_risk, no_risk, 1); // Max 1 to avoid division by zero
+
+            // Calculate heights (max height is 240px for h-64)
+            const getBarHeight = (count) => (count / maxVal) * 240;
+
+            // 1. Reset heights immediately to 0 for a fresh transition state
+            barHigh.style.height = '0px';
+            barLow.style.height = '0px';
+            barNo.style.height = '0px';
+
+            // 2. Use a short timeout (or requestAnimationFrame) to set the final height.
+            // This forces the browser to register the height change and trigger the CSS transition.
+            setTimeout(() => {
+                barHigh.style.height = `${getBarHeight(high_risk)}px`;
+                barLow.style.height = `${getBarHeight(low_risk)}px`;
+                barNo.style.height = `${getBarHeight(no_risk)}px`;
+            }, 50);
+
+            // Update counts and text immediately
+            countHigh.textContent = high_risk;
+            countLow.textContent = low_risk;
+            countNo.textContent = no_risk;
+            totalEvents.textContent = total;
+            priorityValue.textContent = priority === 3 ? "High (Security)" : 
+                                        priority === 2 ? "Medium (System)" : 
+                                        priority === 1 ? "Low (Application)" : "No (File)";
+        }
+        
+        /**
+         * Fetches and displays standard logs.
+         */
+        async function fetchLogs(isPriority=false) {
+            currentLogType = isPriority ? 'Priority (System/Security)' : currentLogType;
+            currentLogDisplay.textContent = currentLogType;
+            clearLogOutput('live logs');
+            setLoading(true);
+
+            const payload = {
+                log_type: currentLogType,
+                start_date: startDateInput.value,
+                end_date: endDateInput.value,
+                risk_filter: isPriority ? 'high' : currentRiskFilter, // Only filter on high risk if priority mode
+                event_id: eventIdInput.value,
+                server_name: remoteComputerInput.value || null,
+            };
+            
+            const url = isPriority ? PRIORITY_URL : API_URL;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Update Summary only if it's the standard fetch
+                    if (!isPriority) {
+                        renderSummary(result.summary);
+                    } else {
+                        // Priority is a filtered view, so we reset priority value display
+                        renderSummary(result.summary || { high_risk: result.logs.length, low_risk: 0, no_risk: 0, priority: 3 });
+                        priorityValue.textContent = "Immediate Action Mode";
+                        totalEvents.textContent = result.logs.length;
+                    }
+
+                    if (result.logs.length === 0) {
+                        logOutput.textContent = "No logs found matching the criteria.";
+                    } else {
+                        logOutput.textContent = result.logs.map(log => 
+                            `[${log.time}] (${log.log_type}/${log.risk_type.toUpperCase()})\n` +
+                            `Source: ${log.source} | Event ID: ${log.event_id}\n` +
+                            `--------------------------------------------------\n`
+                        ).join('');
+                    }
+                } else {
+                    logOutput.innerHTML = `<div class="text-red-400">Error: ${result.error || response.statusText}. Please ensure the backend server is running and the inputs are correct.</div>`;
+                    // Clear chart on error
+                    renderSummary({ high_risk: 0, low_risk: 0, no_risk: 0, priority: 0 });
+                }
+
+            } catch (error) {
+                console.error("Fetch error:", error);
+                logOutput.innerHTML = `<div class="text-red-400">Connection Error: Could not reach Python Backend at http://127.0.0.1:5000. Please ensure the 'event_log_server.py' is running.</div>`;
+                renderSummary({ high_risk: 0, low_risk: 0, no_risk: 0, priority: 0 });
+            } finally {
+                setLoading(false);
+            }
+        }
+        
+        /**
+         * Specialized function to fetch only high-priority, high-risk logs.
+         */
+        function fetchPriorityLogs() {
+            fetchLogs(true);
+        }
+
+        /**
+         * Handles the mock file upload process.
+         */
+        async function uploadLogFile() {
+            const file = logFileInput.files[0];
+            if (!file) {
+                logOutput.innerHTML = `<div class="text-yellow-400">Please select a file to upload.</div>`;
+                return;
+            }
+
+            // Temporarily update UI to show file context
+            currentLogType = 'File Log';
+            currentLogDisplay.textContent = 'File Log';
+            clearLogOutput('uploaded file');
+            
+            setLoading(true, 'upload');
+            uploadButton.textContent = 'Processing...';
+
+            // Use FormData to send the file
+            const formData = new FormData();
+            formData.append('log_file', file);
+
+            try {
+                const response = await fetch(UPLOAD_URL, {
+                    method: 'POST',
+                    body: formData // Fetch handles setting Content-Type for FormData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    renderSummary(result.summary);
+                    logOutput.textContent = 
+                        `[FILE ANALYSIS SUCCESS] ${result.message}\n` +
+                        `--------------------------------------------------\n` +
+                        result.logs.map(log => 
+                            `[${log.time}] (${log.log_type}/${log.risk_type.toUpperCase()})\n` +
+                            `Source: ${log.source} | Event ID: ${log.event_id}\n` +
+                            `--------------------------------------------------\n`
+                        ).join('');
+                } else {
+                    logOutput.innerHTML = `<div class="text-red-400">Upload Error: ${result.error || response.statusText}</div>`;
+                    renderSummary({ high_risk: 0, low_risk: 0, no_risk: 0, priority: 0 });
+                }
+
+            } catch (error) {
+                console.error("Upload fetch error:", error);
+                logOutput.innerHTML = `<div class="text-red-400">Upload Connection Error: Could not reach backend.</div>`;
+                renderSummary({ high_risk: 0, low_risk: 0, no_risk: 0, priority: 0 });
+            } finally {
+                setLoading(false, 'upload');
+                uploadButton.textContent = 'Process Uploaded File';
+            }
+        }
+
+
+        // Initial setup
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initial fetch is still for System logs
+            setRiskFilter(null); // Set default filter UI
+            fetchLogs(); // Initial fetch on load
+        });
+
+    </script>
+</body>
+</html>

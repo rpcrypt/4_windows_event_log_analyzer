@@ -1,0 +1,40 @@
+# --- General Python & Environment Files ---
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables
+.env
+.flaskenv
+
+# --- Flask & Web UI Files ---
+# Flask session files
+flask_session/
+
+# Static files that might be generated dynamically
+# (Although your static/templates are essential, temporary files here should be ignored)
+/static/*.css.map
+
+# --- Database Files (Crucial) ---
+# Ignore the SQLite database file itself
+# This prevents the local event logs from being committed and avoids merge conflicts.
+event_logs.db
+
+# Optional: Ignore old or temporary database files
+*.db-shm
+*.db-wal
+
+# --- PyInstaller Files (for creating the EXE) ---
+# PyInstaller generated folders/files
+/build/
+/dist/
+*.spec
+
+# --- Windows Specific Files ---
+Thumbs.db
+ehthumbs.db
