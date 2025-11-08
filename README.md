@@ -23,6 +23,8 @@ Advanced Filtering: Supports complex querying by Event ID, date range, log type,
 
 
 Dynamic Visualization: Generates dynamic JavaScript bar charts to visually quantify event volume across risk categories, quickly highlighting critical areas9999.
+![Uploading image.png…]()
+
 
 
 
